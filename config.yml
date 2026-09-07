@@ -1,0 +1,18 @@
+backend:
+  name: github
+  repo: your-username/your-repo-name # මෙතැනට ඔබේ GitHub Username සහ Repo Name එක දෙන්න
+  branch: main # හෝ master
+
+media_folder: "images" # වෙබ්සයිට් එකේ Photos Save වන තැන
+public_folder: "/images"
+
+collections:
+  - name: "pages"
+    label: "Pages"
+    files:
+      - file: "index.html"
+        label: "Home Page"
+        name: "home"
+        fields:
+          - { label: "Title", name: "title", widget: "string" }
+          - { label: "Body", name: "body", widget: "markdown" }
