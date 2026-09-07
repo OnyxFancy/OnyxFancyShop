@@ -309,7 +309,6 @@
             color: #000;
         }
 
-        /* User Profile Button styling in Nav */
         .btn-user-profile {
             cursor: pointer;
             background: rgba(212, 175, 55, 0.1);
@@ -1184,6 +1183,11 @@
             }
         ];
 
+        // Safe User Key Generator for Realtime DB paths
+        function getUserDbKey(email) {
+            return email ? email.replace(/[.#$\[\]]/g, "_") : "guest";
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
             const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user"));
 
@@ -1198,7 +1202,7 @@
 
                 updateUserSectionUI(loggedUser);
 
-                // Firebase Realtime Database Syncing
+                // Firebase Realtime Database Syncing (Shop Data)
                 database.ref('shop_data').on('value', (snapshot) => {
                     const data = snapshot.val();
                     if (data) {
@@ -1217,7 +1221,24 @@
                     }
                 });
 
-                // Listen for Live Orders in Realtime Database
+                // Realtime Sync for User Cart & User Orders from Firebase
+                const userKey = getUserDbKey(loggedUser.email);
+
+                database.ref(`user_carts/${userKey}`).on('value', (snapshot) => {
+                    const cartData = snapshot.val();
+                    cartItems = cartData || [];
+                    localStorage.setItem(`onyx_cart_${loggedUser.email}`, JSON.stringify(cartItems));
+                    updateCartUI();
+                });
+
+                database.ref(`user_orders/${userKey}`).on('value', (snapshot) => {
+                    const ordersData = snapshot.val();
+                    orderItems = ordersData || [];
+                    localStorage.setItem(`onyx_orders_${loggedUser.email}`, JSON.stringify(orderItems));
+                    updateOrdersUI();
+                });
+
+                // Listen for Live Orders in Realtime Database (Admin view)
                 database.ref('orders').on('value', (snapshot) => {
                     const ordersData = snapshot.val();
                     globalAdminOrdersList = [];
@@ -1235,20 +1256,6 @@
                 renderCategoriesUI();
                 renderProductsUI();
                 applyAdminPermissions();
-
-                const savedCartKey = `onyx_cart_${loggedUser.email}`;
-                const savedCart = localStorage.getItem(savedCartKey);
-                if (savedCart) {
-                    cartItems = JSON.parse(savedCart);
-                    updateCartUI();
-                }
-
-                const savedOrdersKey = `onyx_orders_${loggedUser.email}`;
-                const savedOrders = localStorage.getItem(savedOrdersKey);
-                if (savedOrders) {
-                    orderItems = JSON.parse(savedOrders);
-                    updateOrdersUI();
-                }
             }
         });
 
@@ -1329,6 +1336,10 @@
             loggedUser.address = newAddress;
 
             localStorage.setItem("onyx_logged_user", JSON.stringify(loggedUser));
+
+            // Sync User Profile to Realtime Database
+            const userKey = getUserDbKey(loggedUser.email);
+            database.ref(`users/${userKey}`).set(loggedUser);
 
             updateUserSectionUI(loggedUser);
 
@@ -1632,6 +1643,9 @@
             const newCat = { id: "cat-" + (categoriesList.length + 1), name: name };
             categoriesList.push(newCat);
 
+            // Auto Save Category Changes to Realtime Database
+            database.ref('shop_data/categories').set(categoriesList);
+
             renderCategoriesUI();
             applyAdminPermissions();
             closeAddCategoryModal();
@@ -1713,6 +1727,9 @@
             const newProduct = { id: newId, title, category, price, image };
             productsList.push(newProduct);
 
+            // Auto Save Products Changes to Realtime Database
+            database.ref('shop_data/products').set(productsList);
+
             renderProductsUI();
             closeAddProductModal();
         }
@@ -1761,6 +1778,9 @@
             productsList[prodIndex].price = price;
             if (uploadedImageBase64) productsList[prodIndex].image = uploadedImageBase64;
 
+            // Auto Save Products Edits to Realtime Database
+            database.ref('shop_data/products').set(productsList);
+
             renderProductsUI();
             closeEditProductModal();
         }
@@ -1769,6 +1789,10 @@
             if (!isAdminUser) return;
             if (confirm("මෙම Product එක ඉවත් කිරීමට අවශ්‍ය බව තහවුරු කරන්න.")) {
                 productsList = productsList.filter(p => p.id !== cardId);
+                
+                // Sync deletion with Realtime Database
+                database.ref('shop_data/products').set(productsList);
+
                 renderProductsUI();
             }
         }
@@ -1833,7 +1857,12 @@
         function saveCartToStorage() {
             const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user"));
             if (loggedUser) {
+                // Save to localStorage
                 localStorage.setItem(`onyx_cart_${loggedUser.email}`, JSON.stringify(cartItems));
+
+                // Realtime Sync to Firebase Database
+                const userKey = getUserDbKey(loggedUser.email);
+                database.ref(`user_carts/${userKey}`).set(cartItems);
             }
         }
 
@@ -1974,7 +2003,12 @@
         function saveOrdersToStorage() {
             const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user"));
             if (loggedUser) {
+                // Save to localStorage
                 localStorage.setItem(`onyx_orders_${loggedUser.email}`, JSON.stringify(orderItems));
+
+                // Realtime Sync to Firebase Database
+                const userKey = getUserDbKey(loggedUser.email);
+                database.ref(`user_orders/${userKey}`).set(orderItems);
             }
         }
 
