@@ -1451,12 +1451,46 @@
             if (revenueEl) revenueEl.innerText = `Rs. ${totalRevenue.toLocaleString()}`;
         }
 
-        /* --- UPDATE / DELETE ORDER IN DATABASE --- */
+        /* --- UPDATE / DELETE ORDER IN DATABASE & SYNC USER ORDERS --- */
         function markOrderCompletedInDB(dbKey) {
             if (!isAdminUser) return;
-            database.ref('orders/' + dbKey).update({ status: 'Completed' })
-            .then(() => alert("Order එක Complete ලෙස සලකුණු කරන ලදී."))
-            .catch(err => alert("Error: " + err.message));
+
+            // Admin Master List එකෙහි Status එක Completed කිරීම
+            database.ref('orders/' + dbKey).get().then((snapshot) => {
+                if (snapshot.exists()) {
+                    const orderData = snapshot.val();
+                    const targetEmail = orderData.customerEmail;
+                    const targetOrderId = orderData.orderId;
+
+                    // 1. Master orders table එකෙහි status එක update කිරීම
+                    database.ref('orders/' + dbKey).update({ status: 'Completed' });
+
+                    // 2. අදාළ පරිශීලකයාගේ user_orders path එකෙහි ඇති order එක සොයා එය Completed කිරීම
+                    if (targetEmail && targetEmail !== 'Not Provided') {
+                        const userKey = getUserDbKey(targetEmail);
+                        database.ref(`user_orders/${userKey}`).get().then((uSnapshot) => {
+                            if (uSnapshot.exists()) {
+                                let userOrders = uSnapshot.val() || [];
+                                let updated = false;
+
+                                userOrders = userOrders.map(ord => {
+                                    if (ord.id === targetOrderId || ord.orderId === targetOrderId) {
+                                        ord.status = 'Completed';
+                                        updated = true;
+                                    }
+                                    return ord;
+                                });
+
+                                if (updated) {
+                                    database.ref(`user_orders/${userKey}`).set(userOrders);
+                                }
+                            }
+                        });
+                    }
+
+                    alert("Order එක සාර්ථකව Complete ලෙස සලකුණු කළ අතර Customer ට එය සටහන් විය.");
+                }
+            }).catch(err => alert("Error: " + err.message));
         }
 
         function deleteOrderFromDB(dbKey) {
@@ -1962,6 +1996,7 @@
 
                     orderItems.unshift({
                         id: orderId,
+                        orderId: orderId,
                         title: `${item.title} (Qty: ${itemQty})`,
                         price: itemTotal,
                         image: item.image,
@@ -2043,6 +2078,7 @@
 
             orderItems.unshift({
                 id: orderId,
+                orderId: orderId,
                 title: `${title} (Qty: ${qty})`,
                 price: totalPrice,
                 image: image,
@@ -2113,7 +2149,7 @@
                 orderCard.className = "order-item-card";
                 orderCard.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 11px; color: #888;">#${order.id} | ${order.date}</span>
+                        <span style="font-size: 11px; color: #888;">#${order.id || order.orderId} | ${order.date}</span>
                         <div style="display: flex; gap: 5px;">
                             <button class="cancel-order-btn" onclick="cancelOrder(${index})" title="Cancel Order">
                                 <i class="fa-solid fa-xmark"></i> Cancel
