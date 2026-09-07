@@ -309,6 +309,20 @@
             color: #000;
         }
 
+        /* User Profile Button styling in Nav */
+        .btn-user-profile {
+            cursor: pointer;
+            background: rgba(212, 175, 55, 0.1);
+            padding: 4px 8px;
+            border-radius: 15px;
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            transition: 0.3s;
+        }
+        .btn-user-profile:hover {
+            background: rgba(212, 175, 55, 0.25);
+            border-color: var(--primary-gold);
+        }
+
         /* Drawers */
         .drawer-overlay {
             position: fixed;
@@ -659,7 +673,7 @@
         .modal-box h3 { font-family: 'Cinzel', serif; color: var(--primary-gold); margin-bottom: 18px; text-align: center; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; font-size: 12px; color: #ccc; margin-bottom: 5px; }
-        .form-group input {
+        .form-group input, .form-group textarea {
             width: 100%;
             padding: 9px 12px;
             background: #0f0f12;
@@ -668,6 +682,13 @@
             color: #fff;
             outline: none;
             font-size: 13px;
+        }
+
+        .form-group input:disabled, .form-group textarea:disabled {
+            background-color: #1a1a20;
+            color: #888;
+            border-color: rgba(255, 255, 255, 0.05);
+            cursor: not-allowed;
         }
 
         .img-preview {
@@ -693,6 +714,7 @@
         .crop-container img { max-width: 100%; display: block; }
         .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
         .btn-submit { flex: 1; padding: 10px; background: linear-gradient(135deg, #d4af37 0%, #aa771c 100%); border: none; color: #000; font-weight: 600; border-radius: 20px; cursor: pointer; }
+        .btn-edit-toggle { flex: 1; padding: 10px; background: #ff9800; border: none; color: #fff; font-weight: 600; border-radius: 20px; cursor: pointer; }
         .btn-cancel { flex: 1; padding: 10px; background: transparent; border: 1px solid #777; color: #ccc; font-weight: 600; border-radius: 20px; cursor: pointer; }
 
         #cropModal .modal-box { max-width: 500px; }
@@ -938,6 +960,36 @@
         </div>
     </div>
 
+    <!-- Modal Form for User Profile Details (Edit & Save Option) -->
+    <div class="modal-overlay" id="userProfileModal">
+        <div class="modal-box">
+            <h3>User Profile Details</h3>
+            <form id="profileForm">
+                <div class="form-group">
+                    <label>නම (Full Name)</label>
+                    <input type="text" id="profileName" disabled>
+                </div>
+                <div class="form-group">
+                    <label>විද්‍යුත් තැපෑල (Email)</label>
+                    <input type="email" id="profileEmail" disabled>
+                </div>
+                <div class="form-group">
+                    <label>දුරකථන අංකය (WhatsApp / Phone)</label>
+                    <input type="text" id="profilePhone" disabled>
+                </div>
+                <div class="form-group">
+                    <label>ලිපිනය (Home Address)</label>
+                    <textarea id="profileAddress" rows="2" disabled></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeUserProfileModal()">Close</button>
+                    <button type="button" id="editProfileBtn" class="btn-edit-toggle" onclick="enableProfileEdit()">Edit Details</button>
+                    <button type="button" id="saveProfileBtn" class="btn-submit" style="display: none;" onclick="saveUserProfileDetails()">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal Form for Adding Category -->
     <div class="modal-overlay" id="addCategoryModal">
         <div class="modal-box">
@@ -1144,24 +1196,7 @@
                     isAdminUser = true;
                 }
 
-                const userSection = document.getElementById("userSection");
-                userSection.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 12px; color: #d4af37;">
-                            <i class="fa-solid ${isAdminUser ? 'fa-user-shield' : 'fa-user-check'}"></i> 
-                            ${isAdminUser ? '[Admin]' : ''} ${loggedUser.fullName ? loggedUser.fullName.split(' ')[0] : 'User'}
-                        </span>
-                        ${isAdminUser ? `
-                            <button class="btn-admin-orders" onclick="openAdminOrdersDrawer()" title="View All Customer Orders">
-                                <i class="fa-solid fa-list-check"></i> Orders <span id="adminOrdersBadge" style="background:#e74c3c; color:#fff; border-radius:50%; padding: 1px 6px; font-size:10px; margin-left:3px;">0</span>
-                            </button>
-                            <button class="btn-admin-save" onclick="saveAllChangesToDatabase()" title="Save All Changes">
-                                <i class="fa-solid fa-cloud-arrow-up"></i> Save
-                            </button>
-                        ` : ''}
-                        <button onclick="handleLogout()" class="btn-auth btn-logout">Logout</button>
-                    </div>
-                `;
+                updateUserSectionUI(loggedUser);
 
                 // Firebase Realtime Database Syncing
                 database.ref('shop_data').on('value', (snapshot) => {
@@ -1216,6 +1251,99 @@
                 }
             }
         });
+
+        /* --- USER SECTION UI UPDATE --- */
+        function updateUserSectionUI(loggedUser) {
+            const userSection = document.getElementById("userSection");
+            const displayName = loggedUser.fullName || loggedUser.name || 'User';
+            userSection.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="btn-user-profile" onclick="openUserProfileModal()" title="View/Edit Profile Details" style="font-size: 12px; color: #d4af37;">
+                        <i class="fa-solid ${isAdminUser ? 'fa-user-shield' : 'fa-user-pen'}"></i> 
+                        ${isAdminUser ? '[Admin]' : ''} ${displayName.split(' ')[0]}
+                    </span>
+                    ${isAdminUser ? `
+                        <button class="btn-admin-orders" onclick="openAdminOrdersDrawer()" title="View All Customer Orders">
+                            <i class="fa-solid fa-list-check"></i> Orders <span id="adminOrdersBadge" style="background:#e74c3c; color:#fff; border-radius:50%; padding: 1px 6px; font-size:10px; margin-left:3px;">0</span>
+                        </button>
+                        <button class="btn-admin-save" onclick="saveAllChangesToDatabase()" title="Save All Changes">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Save
+                        </button>
+                    ` : ''}
+                    <button onclick="handleLogout()" class="btn-auth btn-logout">Logout</button>
+                </div>
+            `;
+        }
+
+        /* --- USER PROFILE MODAL & EDIT FUNCTIONALITY --- */
+        function openUserProfileModal() {
+            const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user")) || {};
+            
+            document.getElementById("profileName").value = loggedUser.fullName || loggedUser.name || '';
+            document.getElementById("profileEmail").value = loggedUser.email || '';
+            document.getElementById("profilePhone").value = loggedUser.whatsappNumber || loggedUser.whatsapp || loggedUser.phone || loggedUser.phoneNumber || '';
+            document.getElementById("profileAddress").value = loggedUser.homeAddress || loggedUser.address || '';
+
+            // Set inputs back to disabled mode
+            document.getElementById("profileName").disabled = true;
+            document.getElementById("profilePhone").disabled = true;
+            document.getElementById("profileAddress").disabled = true;
+
+            document.getElementById("editProfileBtn").style.display = "inline-block";
+            document.getElementById("saveProfileBtn").style.display = "none";
+
+            document.getElementById("userProfileModal").classList.add("active");
+        }
+
+        function closeUserProfileModal() {
+            document.getElementById("userProfileModal").classList.remove("active");
+        }
+
+        function enableProfileEdit() {
+            document.getElementById("profileName").disabled = false;
+            document.getElementById("profilePhone").disabled = false;
+            document.getElementById("profileAddress").disabled = false;
+
+            document.getElementById("editProfileBtn").style.display = "none";
+            document.getElementById("saveProfileBtn").style.display = "inline-block";
+        }
+
+        function saveUserProfileDetails() {
+            let loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user")) || {};
+
+            const newName = document.getElementById("profileName").value.trim();
+            const newPhone = document.getElementById("profilePhone").value.trim();
+            const newAddress = document.getElementById("profileAddress").value.trim();
+
+            if (!newName) {
+                alert("කරුණාකර නම ඇතුළත් කරන්න.");
+                return;
+            }
+
+            // Update local JSON object
+            loggedUser.fullName = newName;
+            loggedUser.name = newName;
+            loggedUser.whatsappNumber = newPhone;
+            loggedUser.phone = newPhone;
+            loggedUser.homeAddress = newAddress;
+            loggedUser.address = newAddress;
+
+            localStorage.setItem("onyx_logged_user", JSON.stringify(loggedUser));
+
+            updateUserSectionUI(loggedUser);
+
+            alert("ඔබගේ විස්තර සාර්ථකව වෙනස් කර සේව් කරන ලදී!");
+
+            // Re-disable inputs
+            document.getElementById("profileName").disabled = true;
+            document.getElementById("profilePhone").disabled = true;
+            document.getElementById("profileAddress").disabled = true;
+
+            document.getElementById("editProfileBtn").style.display = "inline-block";
+            document.getElementById("saveProfileBtn").style.display = "none";
+
+            closeUserProfileModal();
+        }
 
         /* --- SAVE ALL CHANGES TO FIREBASE --- */
         function saveAllChangesToDatabase() {
@@ -1279,9 +1407,10 @@
                     </div>
 
                     <div style="font-size: 12px; color: #fff;">
-                        <div><strong style="color: var(--primary-gold);">Customer:</strong> ${ord.customerName || 'N/A'}</div>
-                        <div><strong style="color: var(--primary-gold);">Phone:</strong> ${ord.customerPhone || 'N/A'}</div>
-                        <div><strong style="color: var(--primary-gold);">Address:</strong> ${ord.customerAddress || 'N/A'}</div>
+                        <div><strong style="color: var(--primary-gold);">Customer Name:</strong> ${ord.customerName || 'N/A'}</div>
+                        <div><strong style="color: var(--primary-gold);">Email:</strong> ${ord.customerEmail || 'N/A'}</div>
+                        <div><strong style="color: var(--primary-gold);">WhatsApp / Phone:</strong> ${ord.customerPhone || 'N/A'}</div>
+                        <div><strong style="color: var(--primary-gold);">Home Address:</strong> ${ord.customerAddress || 'N/A'}</div>
                     </div>
 
                     <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; margin: 4px 0;">
@@ -1769,6 +1898,12 @@
 
             const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user")) || {};
             
+            // Extract User Info (Signup/Login Details)
+            const custName = loggedUser.fullName || loggedUser.name || 'Not Provided';
+            const custEmail = loggedUser.email || 'Not Provided';
+            const custPhone = loggedUser.whatsappNumber || loggedUser.whatsapp || loggedUser.phone || loggedUser.phoneNumber || 'Not Provided';
+            const custAddress = loggedUser.homeAddress || loggedUser.address || 'Not Provided';
+
             if (confirm("Cart එකෙහි ඇති සියලුම Products WhatsApp මඟින් Order කිරීමට අවශ්‍ය බව තහවුරු කරන්න.")) {
                 const now = new Date();
                 const orderDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
@@ -1778,11 +1913,10 @@
                 msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
                 msg += `👤 *CUSTOMER DETAILS*\n`;
-                msg += ` ├ 📛 *Name:* ${loggedUser.fullName || loggedUser.name || 'Not Provided'}\n`;
-                msg += ` ├ 📧 *Email:* ${loggedUser.email || 'Not Provided'}\n`;
-                msg += ` ├ 📞 *Phone:* ${loggedUser.phone || loggedUser.phoneNumber || 'Not Provided'}\n`;
-                msg += ` ├ 🏠 *Address:* ${loggedUser.address || 'Not Provided'}\n`;
-                msg += ` └ 🏙️ *City/Location:* ${loggedUser.city || 'Not Provided'}\n\n`;
+                msg += ` ├ 📛 *Name:* ${custName}\n`;
+                msg += ` ├ 📧 *Email:* ${custEmail}\n`;
+                msg += ` ├ 📞 *WhatsApp/Phone:* ${custPhone}\n`;
+                msg += ` └ 🏠 *Home Address:* ${custAddress}\n\n`;
 
                 msg += `🛒 *ORDER ITEMS*\n`;
                 let grandTotal = 0;
@@ -1815,10 +1949,10 @@
                 // Order එක Firebase Realtime Database එකට සේව් කිරීම (Admin හට පෙනීමට)
                 database.ref('orders').push({
                     orderId: orderId,
-                    customerName: loggedUser.fullName || loggedUser.name || 'Not Provided',
-                    customerEmail: loggedUser.email || 'Not Provided',
-                    customerPhone: loggedUser.phone || loggedUser.phoneNumber || 'Not Provided',
-                    customerAddress: loggedUser.address || 'Not Provided',
+                    customerName: custName,
+                    customerEmail: custEmail,
+                    customerPhone: custPhone,
+                    customerAddress: custAddress,
                     items: cartItems,
                     totalPrice: grandTotal,
                     date: orderDate,
@@ -1855,6 +1989,13 @@
         /* --- BUY NOW SINGLE --- */
         function buyNowSingle(title, price, image, cardId) {
             const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user")) || {};
+            
+            // Extract User Info (Signup/Login Details)
+            const custName = loggedUser.fullName || loggedUser.name || 'Not Provided';
+            const custEmail = loggedUser.email || 'Not Provided';
+            const custPhone = loggedUser.whatsappNumber || loggedUser.whatsapp || loggedUser.phone || loggedUser.phoneNumber || 'Not Provided';
+            const custAddress = loggedUser.homeAddress || loggedUser.address || 'Not Provided';
+
             const qtyElement = document.getElementById(`qty-${cardId}`);
             const qty = qtyElement ? (parseInt(qtyElement.innerText) || 1) : 1;
             const totalPrice = price * qty;
@@ -1878,10 +2019,10 @@
             // Order එක Firebase Realtime Database එකට සේව් කිරීම (Admin හට පෙනීමට)
             database.ref('orders').push({
                 orderId: orderId,
-                customerName: loggedUser.fullName || loggedUser.name || 'Not Provided',
-                customerEmail: loggedUser.email || 'Not Provided',
-                customerPhone: loggedUser.phone || loggedUser.phoneNumber || 'Not Provided',
-                customerAddress: loggedUser.address || 'Not Provided',
+                customerName: custName,
+                customerEmail: custEmail,
+                customerPhone: custPhone,
+                customerAddress: custAddress,
                 title: `${title} (Qty: ${qty})`,
                 price: totalPrice,
                 date: orderDate,
@@ -1895,11 +2036,10 @@
             msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
             msg += `👤 *CUSTOMER DETAILS*\n`;
-            msg += ` ├ 📛 *Name:* ${loggedUser.fullName || loggedUser.name || 'Not Provided'}\n`;
-            msg += ` ├ 📧 *Email:* ${loggedUser.email || 'Not Provided'}\n`;
-            msg += ` ├ 📞 *Phone:* ${loggedUser.phone || loggedUser.phoneNumber || 'Not Provided'}\n`;
-            msg += ` ├ 🏠 *Address:* ${loggedUser.address || 'Not Provided'}\n`;
-            msg += ` └ 🏙️ *City/Location:* ${loggedUser.city || 'Not Provided'}\n\n`;
+            msg += ` ├ 📛 *Name:* ${custName}\n`;
+            msg += ` ├ 📧 *Email:* ${custEmail}\n`;
+            msg += ` ├ 📞 *WhatsApp/Phone:* ${custPhone}\n`;
+            msg += ` └ 🏠 *Home Address:* ${custAddress}\n\n`;
 
             msg += `📦 *PRODUCT DETAILS*\n`;
             msg += ` ├ 🆔 *Order ID:* #${orderId}\n`;
