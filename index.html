@@ -289,6 +289,26 @@
             background: #128C7E;
         }
 
+        .btn-admin-orders {
+            background: rgba(212, 175, 55, 0.2);
+            color: var(--primary-gold);
+            border: 1px solid var(--primary-gold);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            position: relative;
+        }
+
+        .btn-admin-orders:hover {
+            background: var(--primary-gold);
+            color: #000;
+        }
+
         /* Drawers */
         .drawer-overlay {
             position: fixed;
@@ -308,7 +328,7 @@
             top: 0;
             right: -100%;
             width: 100%;
-            max-width: 380px;
+            max-width: 420px;
             height: 100%;
             background: #141417;
             border-left: 1px solid rgba(212, 175, 55, 0.2);
@@ -336,8 +356,18 @@
         .order-item-card, .cart-item {
             background: #18181c;
             border-radius: 10px;
-            padding: 10px;
+            padding: 12px;
             border: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .admin-order-card {
+            background: #1a1a20;
+            border: 1px solid var(--primary-gold);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .cancel-order-btn {
@@ -845,7 +875,7 @@
         </div>
     </div>
 
-    <!-- Side Orders Drawer -->
+    <!-- Side Orders Drawer (For Normal User) -->
     <div class="side-drawer" id="ordersDrawer">
         <div class="drawer-header">
             <h3>My Orders</h3>
@@ -856,6 +886,21 @@
             <div class="drawer-total">
                 <span>Total Spent:</span>
                 <span id="ordersTotalAmount">Rs. 0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Master Orders Drawer Panel -->
+    <div class="side-drawer" id="adminOrdersDrawer">
+        <div class="drawer-header">
+            <h3><i class="fa-solid fa-list-check" style="color: var(--primary-gold);"></i> Manage All Orders</h3>
+            <i class="fa-solid fa-xmark close-drawer" id="closeAdminOrdersBtn"></i>
+        </div>
+        <div class="drawer-items-list" id="adminOrdersItemsContainer"></div>
+        <div class="drawer-footer">
+            <div class="drawer-total">
+                <span>Total Orders Revenue:</span>
+                <span id="adminOrdersTotalRevenue">Rs. 0</span>
             </div>
         </div>
     </div>
@@ -1046,6 +1091,7 @@
     <script>
         let cartItems = [];
         let orderItems = [];
+        let globalAdminOrdersList = [];
         
         const ADMIN_EMAIL = "onyxfancy214@gmail.com";
         let isAdminUser = false;
@@ -1106,6 +1152,9 @@
                             ${isAdminUser ? '[Admin]' : ''} ${loggedUser.fullName ? loggedUser.fullName.split(' ')[0] : 'User'}
                         </span>
                         ${isAdminUser ? `
+                            <button class="btn-admin-orders" onclick="openAdminOrdersDrawer()" title="View All Customer Orders">
+                                <i class="fa-solid fa-list-check"></i> Orders <span id="adminOrdersBadge" style="background:#e74c3c; color:#fff; border-radius:50%; padding: 1px 6px; font-size:10px; margin-left:3px;">0</span>
+                            </button>
                             <button class="btn-admin-save" onclick="saveAllChangesToDatabase()" title="Save All Changes">
                                 <i class="fa-solid fa-cloud-arrow-up"></i> Save
                             </button>
@@ -1114,14 +1163,13 @@
                     </div>
                 `;
 
-                // Firebase Realtime Database එකෙන් Realtime Sync වීම
+                // Firebase Realtime Database Syncing
                 database.ref('shop_data').on('value', (snapshot) => {
                     const data = snapshot.val();
                     if (data) {
                         if (data.categories) categoriesList = data.categories;
                         if (data.products) productsList = data.products;
                         
-                        // Database එකෙන් Logos ලබා ගැනීම
                         if (data.headerLogo) {
                             document.getElementById("headerLogoImg").src = data.headerLogo;
                         }
@@ -1131,6 +1179,21 @@
 
                         renderCategoriesUI();
                         renderProductsUI();
+                    }
+                });
+
+                // Listen for Live Orders in Realtime Database
+                database.ref('orders').on('value', (snapshot) => {
+                    const ordersData = snapshot.val();
+                    globalAdminOrdersList = [];
+                    if (ordersData) {
+                        Object.keys(ordersData).forEach(key => {
+                            globalAdminOrdersList.push({ dbKey: key, ...ordersData[key] });
+                        });
+                        globalAdminOrdersList.reverse(); // Newest first
+                    }
+                    if (isAdminUser) {
+                        renderAdminOrdersUI();
                     }
                 });
 
@@ -1154,7 +1217,7 @@
             }
         });
 
-        /* --- GLOBAL SAVE FUNCTION FOR ADMIN TO FIREBASE REALTIME DATABASE --- */
+        /* --- SAVE ALL CHANGES TO FIREBASE --- */
         function saveAllChangesToDatabase() {
             if (!isAdminUser) return;
 
@@ -1171,6 +1234,98 @@
             }).catch((error) => {
                 alert("Error: " + error.message);
             });
+        }
+
+        /* --- ADMIN ORDERS PANEL UI --- */
+        function renderAdminOrdersUI() {
+            const container = document.getElementById("adminOrdersItemsContainer");
+            const badge = document.getElementById("adminOrdersBadge");
+            const revenueEl = document.getElementById("adminOrdersTotalRevenue");
+
+            if (!container) return;
+
+            container.innerHTML = "";
+            let pendingCount = 0;
+            let totalRevenue = 0;
+
+            if (globalAdminOrdersList.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #888; margin-top: 20px;">තවම කිසිදු Customer Order එකක් නොමැත.</p>';
+                if (badge) badge.innerText = "0";
+                if (revenueEl) revenueEl.innerText = "Rs. 0";
+                return;
+            }
+
+            globalAdminOrdersList.forEach((ord) => {
+                totalRevenue += (ord.totalPrice || ord.price || 0);
+                if (ord.status !== 'Completed') pendingCount++;
+
+                const isCompleted = ord.status === 'Completed';
+
+                let itemsHtml = '';
+                if (ord.items && Array.isArray(ord.items)) {
+                    ord.items.forEach(it => {
+                        itemsHtml += `<div style="font-size: 11px; color: #ccc;">• ${it.title} (x${it.quantity || 1}) - Rs. ${(it.price * (it.quantity||1)).toLocaleString()}</div>`;
+                    });
+                } else {
+                    itemsHtml = `<div style="font-size: 11px; color: #ccc;">• ${ord.title} - Rs. ${(ord.price||0).toLocaleString()}</div>`;
+                }
+
+                const card = document.createElement("div");
+                card.className = "admin-order-card";
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 5px;">
+                        <span style="font-size: 11px; font-weight: bold; color: var(--primary-gold);">ID: #${ord.orderId || ord.id}</span>
+                        <span style="font-size: 10px; color: #888;">${ord.date}</span>
+                    </div>
+
+                    <div style="font-size: 12px; color: #fff;">
+                        <div><strong style="color: var(--primary-gold);">Customer:</strong> ${ord.customerName || 'N/A'}</div>
+                        <div><strong style="color: var(--primary-gold);">Phone:</strong> ${ord.customerPhone || 'N/A'}</div>
+                        <div><strong style="color: var(--primary-gold);">Address:</strong> ${ord.customerAddress || 'N/A'}</div>
+                    </div>
+
+                    <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; margin: 4px 0;">
+                        <strong style="font-size: 11px; color: #fff;">Items:</strong>
+                        ${itemsHtml}
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                        <span style="font-size: 13px; font-weight: bold; color: var(--primary-gold);">Total: Rs. ${(ord.totalPrice || ord.price || 0).toLocaleString()}</span>
+                        <div style="display: flex; gap: 6px;">
+                            ${!isCompleted ? `
+                                <button class="complete-order-btn" onclick="markOrderCompletedInDB('${ord.dbKey}')">
+                                    <i class="fa-solid fa-circle-check"></i> Complete
+                                </button>
+                            ` : '<span style="font-size: 11px; color: #25D366; font-weight: 600;"><i class="fa-solid fa-check-double"></i> Done</span>'}
+                            <button class="cancel-order-btn" onclick="deleteOrderFromDB('${ord.dbKey}')">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+
+            if (badge) badge.innerText = pendingCount;
+            if (revenueEl) revenueEl.innerText = `Rs. ${totalRevenue.toLocaleString()}`;
+        }
+
+        /* --- UPDATE / DELETE ORDER IN DATABASE --- */
+        function markOrderCompletedInDB(dbKey) {
+            if (!isAdminUser) return;
+            database.ref('orders/' + dbKey).update({ status: 'Completed' })
+            .then(() => alert("Order එක Complete ලෙස සලකුණු කරන ලදී."))
+            .catch(err => alert("Error: " + err.message));
+        }
+
+        function deleteOrderFromDB(dbKey) {
+            if (!isAdminUser) return;
+            if (confirm("මෙම Order එක පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍ය බව තහවුරු කරන්න.")) {
+                database.ref('orders/' + dbKey).remove()
+                .then(() => alert("Order එක ඉවත් කරන ලදී."))
+                .catch(err => alert("Error: " + err.message));
+            }
         }
 
         /* --- RENDER PRODUCTS DYNAMICALLY --- */
@@ -1383,7 +1538,6 @@
                 dbKey = "footerLogo";
             }
 
-            // Realtime Database එකට කෙලින්ම Update කිරීම
             if (dbKey) {
                 database.ref('shop_data/' + dbKey).set(uploadedImageBase64)
                 .then(() => {
@@ -1606,7 +1760,7 @@
             cartTotalAmount.innerText = `Rs. ${total.toLocaleString()}`;
         }
 
-        /* --- CHECKOUT CART --- */
+        /* --- CHECKOUT CART & SAVE ORDER TO DATABASE --- */
         function checkoutCart() {
             if (cartItems.length === 0) {
                 alert("Cart එක හිස්ව පවතී.");
@@ -1618,6 +1772,7 @@
             if (confirm("Cart එකෙහි ඇති සියලුම Products WhatsApp මඟින් Order කිරීමට අවශ්‍ය බව තහවුරු කරන්න.")) {
                 const now = new Date();
                 const orderDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                const orderId = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
 
                 let msg = `✨ *NEW CART ORDER - ONYX FANCY SHOP* ✨\n`;
                 msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -1643,7 +1798,7 @@
                     msg += `    └ 💵 *Subtotal:* Rs. ${itemTotal.toLocaleString()}\n`;
 
                     orderItems.unshift({
-                        id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
+                        id: orderId,
                         title: `${item.title} (Qty: ${itemQty})`,
                         price: itemTotal,
                         image: item.image,
@@ -1656,6 +1811,19 @@
                 msg += `📅 *Date & Time:* ${orderDate}\n\n`;
                 msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
                 msg += `🙏 *Thank you for shopping with ONYX FANCY SHOP!*`;
+
+                // Order එක Firebase Realtime Database එකට සේව් කිරීම (Admin හට පෙනීමට)
+                database.ref('orders').push({
+                    orderId: orderId,
+                    customerName: loggedUser.fullName || loggedUser.name || 'Not Provided',
+                    customerEmail: loggedUser.email || 'Not Provided',
+                    customerPhone: loggedUser.phone || loggedUser.phoneNumber || 'Not Provided',
+                    customerAddress: loggedUser.address || 'Not Provided',
+                    items: cartItems,
+                    totalPrice: grandTotal,
+                    date: orderDate,
+                    status: 'Pending'
+                });
 
                 cartItems = [];
                 saveCartToStorage();
@@ -1684,15 +1852,6 @@
             }
         }
 
-        function completeOrder(index) {
-            if (!isAdminUser) return;
-            if (confirm("මෙම Order එක Complete කළ බව තහවුරු කරන්න.")) {
-                orderItems[index].status = 'Completed';
-                saveOrdersToStorage();
-                updateOrdersUI();
-            }
-        }
-
         /* --- BUY NOW SINGLE --- */
         function buyNowSingle(title, price, image, cardId) {
             const loggedUser = JSON.parse(localStorage.getItem("onyx_logged_user")) || {};
@@ -1712,6 +1871,19 @@
                 title: `${title} (Qty: ${qty})`,
                 price: totalPrice,
                 image: image,
+                date: orderDate,
+                status: 'Pending'
+            });
+
+            // Order එක Firebase Realtime Database එකට සේව් කිරීම (Admin හට පෙනීමට)
+            database.ref('orders').push({
+                orderId: orderId,
+                customerName: loggedUser.fullName || loggedUser.name || 'Not Provided',
+                customerEmail: loggedUser.email || 'Not Provided',
+                customerPhone: loggedUser.phone || loggedUser.phoneNumber || 'Not Provided',
+                customerAddress: loggedUser.address || 'Not Provided',
+                title: `${title} (Qty: ${qty})`,
+                price: totalPrice,
                 date: orderDate,
                 status: 'Pending'
             });
@@ -1769,11 +1941,6 @@
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span style="font-size: 11px; color: #888;">#${order.id} | ${order.date}</span>
                         <div style="display: flex; gap: 5px;">
-                            ${isAdminUser && !isCompleted ? `
-                                <button class="complete-order-btn" onclick="completeOrder(${index})" title="Complete Order">
-                                    <i class="fa-solid fa-check"></i> Complete
-                                </button>
-                            ` : ''}
                             <button class="cancel-order-btn" onclick="cancelOrder(${index})" title="Cancel Order">
                                 <i class="fa-solid fa-xmark"></i> Cancel
                             </button>
@@ -1806,18 +1973,33 @@
         const openOrdersBtn = document.getElementById('openOrdersBtn');
         const closeOrdersBtn = document.getElementById('closeOrdersBtn');
         const ordersDrawer = document.getElementById('ordersDrawer');
+
+        const adminOrdersDrawer = document.getElementById('adminOrdersDrawer');
+        const closeAdminOrdersBtn = document.getElementById('closeAdminOrdersBtn');
         const drawerOverlay = document.getElementById('drawerOverlay');
 
-        function openCartDrawer() { closeOrdersDrawer(); cartDrawer.classList.add('active'); drawerOverlay.classList.add('active'); }
+        function openCartDrawer() { closeAllDrawers(); cartDrawer.classList.add('active'); drawerOverlay.classList.add('active'); }
         function closeCartDrawer() { cartDrawer.classList.remove('active'); drawerOverlay.classList.remove('active'); }
-        function openOrdersDrawer() { closeCartDrawer(); ordersDrawer.classList.add('active'); drawerOverlay.classList.add('active'); }
+        
+        function openOrdersDrawer() { closeAllDrawers(); ordersDrawer.classList.add('active'); drawerOverlay.classList.add('active'); }
         function closeOrdersDrawer() { ordersDrawer.classList.remove('active'); drawerOverlay.classList.remove('active'); }
+
+        function openAdminOrdersDrawer() { closeAllDrawers(); adminOrdersDrawer.classList.add('active'); drawerOverlay.classList.add('active'); }
+        function closeAdminOrdersDrawer() { adminOrdersDrawer.classList.remove('active'); drawerOverlay.classList.remove('active'); }
+
+        function closeAllDrawers() {
+            cartDrawer.classList.remove('active');
+            ordersDrawer.classList.remove('active');
+            adminOrdersDrawer.classList.remove('active');
+            drawerOverlay.classList.remove('active');
+        }
 
         openCartBtn.addEventListener('click', openCartDrawer);
         closeCartBtn.addEventListener('click', closeCartDrawer);
         openOrdersBtn.addEventListener('click', openOrdersDrawer);
         closeOrdersBtn.addEventListener('click', closeOrdersDrawer);
-        drawerOverlay.addEventListener('click', () => { closeCartDrawer(); closeOrdersDrawer(); });
+        if(closeAdminOrdersBtn) closeAdminOrdersBtn.addEventListener('click', closeAdminOrdersDrawer);
+        drawerOverlay.addEventListener('click', closeAllDrawers);
 
         /* --- SEARCH FUNCTIONALITY --- */
         const inlineSearchBox = document.getElementById('inlineSearchBox');
